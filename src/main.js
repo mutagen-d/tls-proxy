@@ -33,3 +33,4 @@ const proxy = net.createServer((socket) => {
 
 const port = 8075
 proxy.listen(port, '0.0.0.0', () => console.log(time(), 'server listening port', port));
+proxy.on('error', (err) => console.error(time(), 'server error', err));
