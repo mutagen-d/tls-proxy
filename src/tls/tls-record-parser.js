@@ -3,15 +3,19 @@ const { TlsPacket } = require('./tls-packet');
 
 class TLSRecordParser extends Transform {
   constructor(options = {}) {
-    super({ ...options, readableObjectMode: true });
+    super(options);
     this.buffer = Buffer.alloc(0);
     this.handshakeComplete = false;
   }
 
   _transform(chunk, encoding, callback) {
     this.buffer = Buffer.concat([this.buffer, chunk]);
-    const [length, packets] = TlsPacket.from(this.buffer);
-    this.buffer = this.buffer.slice(length);
+    const [leftoverBytes, packets] = TlsPacket.from(this.buffer);
+    const consumed = this.buffer.length - leftoverBytes;
+    if (consumed >= 0) {
+      this.buffer = this.buffer.slice(consumed);
+    }
+    // Forward raw chunk downstream immediately (passthrough behavior).
     this.push(chunk, encoding);
     callback();
   }
