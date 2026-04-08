@@ -5,7 +5,6 @@ class TLSRecordParser extends Transform {
   constructor(options = {}) {
     super(options);
     this.buffer = Buffer.alloc(0);
-    this.handshakeComplete = false;
   }
 
   _transform(chunk, encoding, callback) {

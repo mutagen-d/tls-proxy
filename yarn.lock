@@ -2,6 +2,11 @@
 # yarn lockfile v1
 
 
+"@mutagen-d/node-proxy-server@^1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@mutagen-d/node-proxy-server/-/node-proxy-server-1.1.0.tgz#a255967bcfc7746843e248997b1dcfb84a8b3f3b"
+  integrity sha512-YQl3onoErx2C2nhyfqtn1oe0WP03z8JnU6com17Z8g9lPi7NSEu/TRKss6YlwE+97vzx50zPDy/hdl1mA6Dpmg==
+
 "@types/node@^25.5.2":
   version "25.5.2"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-25.5.2.tgz#94861e32f9ffd8de10b52bbec403465c84fff762"

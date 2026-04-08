@@ -1,8 +1,11 @@
+const { time } = require("../tools/time");
 const { TLS_VERSIONS, EXTENSION_TYPES } = require("./constants");
 
 class TlsExtension {
   /** @type {number} */
   type
+  /** @type {string} */
+  typeHex
   /** @type {EXTENSION_TYPES[keyof typeof EXTENSION_TYPES] | `Unknown${number}`} */
   typeName
   /** @type {number} */
@@ -21,6 +24,8 @@ class TlsExtension {
   versions
   /** @type {string} */
   key_share
+  /** @type {Buffer} */
+  raw_data
 
   /**
    * @param {Partial<TlsExtension>} [params]
@@ -31,7 +36,9 @@ class TlsExtension {
 
   toJSON() {
     return {
+      name: 'TlsExtension',
       type: this.type,
+      typeHex: this.typeHex,
       typeName: this.typeName,
       length: this.length,
       server_names: this.server_names,
@@ -41,8 +48,47 @@ class TlsExtension {
       protocol_name_list: this.protocol_name_list,
       versions: this.versions,
       key_share: this.key_share,
+      raw_data: this.raw_data?.toString('hex'),
     }
   }
+
+  toBuffer() {
+    const { raw_data } = this;
+    const { type, length, server_names } = this
+    if (server_names) {
+      const namesBufs = server_names.map((n) => {
+        const nameBuf = Buffer.from(n.host_name, 'ascii');
+        const buf = Buffer.alloc(3 + nameBuf.length);
+        buf[0] = n.type;
+        buf.writeUInt16BE(nameBuf.length, 1);
+        nameBuf.copy(buf, 3);
+        return buf;
+      });
+      const serverNameListBuf = Buffer.concat([
+        Buffer.alloc(2), // Placeholder for list length
+        ...namesBufs,
+      ]);
+      serverNameListBuf.writeUInt16BE(serverNameListBuf.length - 2, 0); // Write list length
+      const buffer = Buffer.concat([
+        Buffer.alloc(4), // Placeholder for type and length
+        serverNameListBuf,
+      ]);
+      buffer.writeUint16BE(type, 0)
+      buffer.writeUint16BE(serverNameListBuf.length, 2)
+      if (serverNameListBuf.length !== length) {
+        console.warn(time(), `length mismatch: expected (${length}) but got (${serverNameListBuf.length})`, this.toJSON())
+      }
+      return buffer
+    }
+    if (raw_data) {
+      const extBuf = Buffer.alloc(4 + raw_data.length);
+      extBuf.writeUInt16BE(type, 0);
+      extBuf.writeUInt16BE(raw_data.length, 2);
+      raw_data.copy(extBuf, 4);
+      return extBuf;
+    }
+  }
+
   /**
    * @param {Buffer} buffer
    * @returns
@@ -67,6 +113,7 @@ class TlsExtension {
       const extData = buffer.slice(offset, offset + extLen);
       const ext = {
         type: extType,
+        typeHex: `0x${extType.toString(16).toUpperCase()}`,
         typeName: EXTENSION_TYPES[extType] || `Unknown(${extType})`,
         length: extLen,
       };
@@ -94,8 +141,16 @@ class TlsExtension {
         // key_share (simplified)
         ext.key_share = extData.toString('hex').slice(0, 64) + '...';
       }
+      ext.raw_data = extData
 
-      extensions.push(new TlsExtension(ext));
+      const extension = new TlsExtension(ext);
+      {
+        const _buf = extension.toBuffer()
+        if (!_buf.slice(4).equals(extData)) {
+          console.warn(time(), `extensions not equal: ${ext.typeName}`)
+        }
+      }
+      extensions.push(extension)
       offset += extLen;
     }
 
