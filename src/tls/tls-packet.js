@@ -37,6 +37,30 @@ class TlsPacket {
     }
   }
 
+  toBuffer() {
+    if (this.contentTypeName !== 'Handshake' && this.handshakes.some(h => h.msgTypeName !== 'ClientHello')) {
+      const buffer = Buffer.concat([Buffer.alloc(5), this.fragment])
+      buffer.writeUint8(this.contentType)
+      buffer.writeUint16BE(parseInt(this.version, 16))
+      buffer.writeUint16BE(this.fragment.length)
+      return buffer
+    }
+    let buffer = Buffer.concat(this.handshakes.map(h => h.toBuffer()))
+    const length = buffer.length
+    buffer = Buffer.concat([Buffer.alloc(5), buffer])
+    buffer.writeUint8(this.contentType)
+    buffer.writeUint16BE(parseInt(this.version, 16))
+    buffer.writeUint16BE(length)
+    return buffer
+  }
+
+  changeSni(newSni) {
+    const ext = this.getExtension('server_name')
+    if (ext && ext.server_names?.[0]) {
+      ext.server_names[0].host_name = newSni
+    }
+  }
+
   getSni() {
     const ext = this.getExtension('server_name')
     if (!ext) {

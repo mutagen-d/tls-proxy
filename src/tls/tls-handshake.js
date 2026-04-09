@@ -31,6 +31,23 @@ class TlsHandshake {
     }
   }
 
+  toBuffer(simplified = false) {
+    if (simplified) {
+      const { msgType, msgBody } = this
+      const length = msgBody.length
+      const header = Buffer.alloc(4)
+      header.writeUInt8(msgType, 0)
+      header.writeUIntBE(length, 1, 3)
+      return Buffer.concat([header, msgBody])
+    }
+    const msgBody = this.parsed?.toBuffer ? this.parsed.toBuffer() : this.msgBody
+    const length = msgBody.length
+    const header = Buffer.alloc(4)
+    header.writeUInt8(this.msgType, 0)
+    header.writeUIntBE(length, 1, 3)
+    return Buffer.concat([header, msgBody])
+  }
+
   /**
    * @param {Buffer} fragment
    */
