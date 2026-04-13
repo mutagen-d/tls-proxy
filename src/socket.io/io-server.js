@@ -3,6 +3,8 @@ const EventEmitter = require('events')
 const { Server } = require('socket.io')
 const { config } = require('../config')
 const { getAddress } = require('./get-address')
+const { createLogger } = require('../tools/logger')
+const { createSpamer } = require('./io-spam')
 
 /**
  * @type {EventEmitter & {
@@ -11,19 +13,7 @@ const { getAddress } = require('./get-address')
  */
 const events = new EventEmitter()
 
-const fns = {}
-/**
- * @type {typeof console}
- */
-const logger = new Proxy({}, {
-  get(target, key) {
-    if (!console[key]) {
-      key = 'log'
-    }
-    fns[key] = fns[key] || console[key].bind(console, new Date().toISOString(), '[Socket.IO]')
-    return fns[key]
-  },
-})
+const logger = createLogger('Socket.IO')
 const server = http.createServer()
 const io = new Server(server, { path: '/10chat.io' })
 
@@ -44,8 +34,14 @@ io.of('/chat').on('connect', (socket) => {
   const ip = address.remote.ip
   logger.log(ip, `connected ${address}`)
   events.emit(EVENTS.connect, socket, logger)
+  const spamer = createSpamer()
+  spamer.start(socket)
+  socket.onAny((event, ...args) => {
+    logger.log(ip, 'event:', event)
+  })
   socket.on('disconnect', (reason) => {
     logger.log(ip, 'disconnected', reason)
+    spamer.stop()
   })
 })
 
