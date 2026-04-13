@@ -2,8 +2,14 @@ const http = require('http')
 const EventEmitter = require('events')
 const { Server } = require('socket.io')
 const { config } = require('../config')
+const { getAddress } = require('./get-address')
 
-const emitter = new EventEmitter()
+/**
+ * @type {EventEmitter & {
+ *  onConnect: (callback: (socket: import('socket.io').Socket, logger: typeof console) => void) => { remove: () => void }
+ * }}
+ */
+const events = new EventEmitter()
 
 const fns = {}
 /**
@@ -30,25 +36,26 @@ io.of('/chat').use((socket, next) => {
   err.data = { message: 'unauthorized' }
   next(err)
 })
+const EVENTS = Object.freeze({
+  connect: 'connect',
+})
 io.of('/chat').on('connect', (socket) => {
-  const ip = socket.request.socket.remoteAddress
-  logger.log(ip, 'connected')
+  const address = getAddress(socket)
+  const ip = address.remote.ip
+  logger.log(ip, `connected ${address}`)
+  events.emit(EVENTS.connect, socket, logger)
   socket.on('disconnect', (reason) => {
     logger.log(ip, 'disconnected', reason)
   })
-  emitter.emit('connected', socket)
 })
 
-/**
- * @param {(socket: import('socket.io').Socket) => void} callback
- */
-const onConnect = (callback) => {
-  const remove = () => emitter.off('connect', callback)
-  remove()
-  emitter.on('connect', callback)
+events.onConnect = (callback) => {
+  const remove = () => events.off(EVENTS.connect, callback)
+  events.off(EVENTS.connect, callback)
+  events.on(EVENTS.connect, callback)
   return { remove }
 }
 
 server.listen(config.port, '127.0.0.1', () => logger.log('server listening port', config.port))
 
-module.exports = { onConnect }
+module.exports = { events }

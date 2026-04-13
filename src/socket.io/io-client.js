@@ -1,6 +1,14 @@
+const EventEmitter = require('events')
 const { io } = require('socket.io-client')
 const { config } = require('../config')
+const { getAddress } = require('./get-address')
 
+/**
+ * @type {EventEmitter & {
+ *  onConnect: (callback: (socket: import('socket.io-client').Socket, logger: typeof console) => void) => { remove: () => void }
+ * }}
+ */
+const events = new EventEmitter()
 const fns = {}
 /** @type {typeof console} */
 const logger = new Proxy({}, {
@@ -19,20 +27,15 @@ const url = config.appEnv === 'production'
  * @param {(socket: import('socket.io-client').Socket) => void} [callback]
  * @returns 
  */
-const connect = (callback) => {
+const connect = () => {
   const socket = io(url, {
     path: '/10chat.io',
-    auth: { token: config.authToken }
+    auth: { token: config.authToken },
+    transports: ['websocket', 'polling'],
   })
   socket.on('connect', () => {
-    logger.log(config.host, 'connected')
-    if (typeof callback === 'function') {
-      try {
-        callback(socket)
-      } catch (e) {
-        logger.warn(config.host, e)
-      }
-    }
+    logger.log(config.host, `connected ${getAddress(socket)}`)
+    events.emit('connect', socket, logger)
   })
   socket.on('disconnect', (reason) => {
     logger.log(config.host, 'disconnected', reason)
@@ -43,4 +46,11 @@ const connect = (callback) => {
   return socket
 }
 
-module.exports = { connect }
+events.onConnect = (callback) => {
+  events.off('connect', callback)
+  events.on('connect', callback)
+  const remove = () => events.off('connect', callback)
+  return { remove }
+}
+
+module.exports = { connect, events }
