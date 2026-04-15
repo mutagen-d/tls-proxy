@@ -15,7 +15,7 @@ const createSpamer = (timer) => {
     }, timeout)
   }
   const stop = () => clearTimeout(timer)
-  return { start: start, stop }
+  return { start, stop }
 }
 
 module.exports = { createSpamer }
