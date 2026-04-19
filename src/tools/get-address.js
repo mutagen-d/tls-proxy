@@ -1,5 +1,5 @@
 /**
- * @param {import('socket.io').Socket | import('socket.io-client').Socket} socket 
+ * @param {import('socket.io').Socket | import('socket.io-client').Socket | import('net').Socket} socket 
  */
 const getAddress = (socket) => {
   /**
@@ -35,7 +35,7 @@ const getAddress = (socket) => {
         port: rawSocket.remotePort,
       }
     }
-  } else {
+  } else if (socket.request && socket.request.socket) {
     const sock = socket.request.socket
     address.local = {
       ip: sock.localAddress,
@@ -44,6 +44,15 @@ const getAddress = (socket) => {
     address.remote = {
       ip: sock.remoteAddress,
       port: sock.remotePort,
+    }
+  } else {
+    address.local = {
+      ip: socket.localAddress,
+      port: socket.localPort,
+    }
+    address.remote = {
+      ip: socket.remoteAddress,
+      port: socket.remotePort,
     }
   }
   Object.defineProperty(address, 'toString', {
