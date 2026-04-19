@@ -73,6 +73,9 @@ const createProxyConnection = async (opts, callback) => {
     fakeSni: opts.dstHost,
     realSni: config.fakeHost,
   })
+  fakeTls.on('error', (err) => {
+    logger.log('FAKE_TLS Error:', err)
+  })
   sites[srcKey].socket = fakeTls
 }
 
@@ -88,6 +91,9 @@ server.on('connection', async (socket) => {
   socket.once('close', () => {
     delete sites[key]
     logger.log(`disconnected ${key}`)
+  })
+  socket.on('error', (err) => {
+    logger.log('NET_SOCKET Error:', err)
   })
   let startTime
   const waitWS = async (timeoutMs) => {
@@ -138,5 +144,7 @@ server.on('connection', async (socket) => {
   wss.events.once(`connectWS:${key}`, connectWS)
   wss.events.once(`errorWS:${key}`, errorWS)
 })
+
+server.on('error', (err) => logger.log('ERROR:', err))
 
 server.listen(config.remote.port, '0.0.0.0', () => logger.log('server listening port', config.remote.port))
