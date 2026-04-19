@@ -13,9 +13,19 @@ const ws = connect()
 const server = createProxyServer({
   createProxyConnection: async (opts, req) => {
     const { dstHost, dstPort } = opts
-    const isTls = req && req.method.toLowerCase() === 'connect' && dstPort !== 80;
+    const isHttp = Boolean(req && req.method)
+    const isTls = isHttp && req.method.toLowerCase() === 'connect' && dstPort !== 80;
+    if (dstPort === 80) {
+      const sock = net.createConnection(dstPort, dstHost)
+      const defer = new Defer()
+      sock.on('connect', () => defer.resolve())
+      sock.on('error', (err) => defer.reject(err))
+      await defer.promise
+      return sock
+    }
     const socket = net.createConnection(config.remote.port, config.remote.host)
-    logger.log(`proxy: ${dstHost}:${dstPort}`)
+    const dstKey = `${dstHost}:${dstPort}`
+    logger.log(`proxy: ${dstKey} ${isTls ? '(tls)' : ''}`)
     const connDefer = new Defer()
     socket.on('connect', () => connDefer.resolve())
     socket.on('error', (err) => connDefer.reject(err))
@@ -30,14 +40,11 @@ const server = createProxyServer({
         defer.reject(err)
         socket.destroy()
       } else {
-        logger.log('proxy-connected', err)
+        logger.log('proxy-connected', dstKey)
         defer.resolve()
       }
     })
     await defer.promise
-    if (!isTls) {
-      return socket
-    }
     logger.log(`fakeTLS: ${JSON.stringify({ fakeSni: config.fakeHost, realSni: dstHost })}`)
     const fakeTls = new FakeTls(socket, {
       fakeSni: config.fakeHost,
@@ -47,4 +54,5 @@ const server = createProxyServer({
   }
 })
 
+server.on('error', (err) => logger.log('ERROR:', err))
 server.listen(config.local.port, '0.0.0.0', () => logger.log('server listening port', config.local.port))
