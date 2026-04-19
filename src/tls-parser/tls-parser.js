@@ -21,6 +21,8 @@ class TlsParser extends EventEmitter {
     this.clientHelloDone = false
     this.serverHelloDone = false
     this.handshakeDone = false
+    /** @type {boolean} */
+    this.isTls
     /** @private */
     this.handshakeTypes = [
       'Handshake',
@@ -29,6 +31,10 @@ class TlsParser extends EventEmitter {
     this.on('handshake_complete', () => {
       this.logger.log('Handshake Complete')
     })
+  }
+
+  get isHelloDone() {
+    return this.clientHelloDone || this.serverHelloDone
   }
 
   /**
@@ -66,13 +72,19 @@ class TlsParser extends EventEmitter {
     return buffer
   }
 
-  parse(chunk) {
+  parse(chunk, encoding) {
     let buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk
     const records = []
     while (buffer.length >= 5) {
       // const contentType = buffer[0];
       // const version = buffer.readUInt16BE(1);
       const length = buffer.readUInt16BE(3);
+      if (!this.isHelloDone) {
+        this.isTls ||= TlsPacket.isClientHello(buffer) || TlsPacket.isServerHello(buffer)
+      }
+      if (!this.isTls) {
+        break
+      }
       
       if (buffer.length < 5 + length) {
         break; // Wait for more data
@@ -88,7 +100,7 @@ class TlsParser extends EventEmitter {
     }
     this.buffer = buffer
     const i = records.length
-    this.logger.log(`[${i}] leftOverLen`, this.buffer.length)
+    this.logger.log(`[${i}] leftOverLen`, this.buffer.length, `${this.isTls ? '' : '[NOT_TLS]'}`, `${Buffer.isBuffer(chunk)} ${encoding || '-'}`)
     return records
   }
 }

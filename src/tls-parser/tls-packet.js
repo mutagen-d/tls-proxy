@@ -1,4 +1,4 @@
-const { getContentType, getTlsVersion } = require('./constants')
+const { getContentType, getTlsVersion, TLS_VERSIONS } = require('./constants')
 const { TlsHandshake } = require('./tls-handshake')
 
 /**
@@ -83,6 +83,32 @@ class TlsPacket {
   getExtension(type) {
     const hello = this.body.value?.find(v => ['ServerHello', 'ClientHello'].includes(v.type.name))
     return hello ? hello.getExtension(type) : null
+  }
+
+  /**
+   * @param {Buffer} buffer
+   */
+  static isClientHello(buffer) {
+    if (!buffer || buffer.length < 6) {
+      return false
+    }
+    const version = buffer.readUInt16BE(1);
+    return Boolean(TLS_VERSIONS[version]) &&
+      buffer[0] === 22 && // Handshake
+      buffer[5] === 1;    // ClientHello
+  }
+
+  /**
+   * @param {Buffer} buffer
+   */
+  static isServerHello(buffer) {
+    if (!buffer || buffer.length < 6) {
+      return false
+    }
+    const version = buffer.readUInt16BE(1);
+    return Boolean(TLS_VERSIONS[version]) &&
+      buffer[0] === 22 && // Handshake
+      buffer[5] === 2;    // ServerHello
   }
 
   /**

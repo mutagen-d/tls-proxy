@@ -28,12 +28,17 @@ class FakeTls extends Transform {
 
   /** @private */
   _onData(chunk) {
-    if (this.isRealDone) {
+    if (this.isRealDone || this.real.isTls === false) {
       const buffer = this.real.buffer.length ? Buffer.concat([this.real.flush(), chunk]) : chunk
       this.push(buffer)
       return
     }
     const packets = this.real.parse(chunk)
+    if (!this.real.isTls) {
+      const buffer = this.real.buffer.length ? Buffer.concat([this.real.flush(), chunk]) : chunk
+      this.push(buffer)
+      return
+    }
     if (packets.length) {
       const buffer = Buffer.concat(packets.map(v => v.toBuffer()))
       this.push(buffer)
@@ -54,7 +59,7 @@ class FakeTls extends Transform {
 
   _transform(chunk, encoding, callback) {
     try {
-      if (this.isFakeDone) {
+      if (this.isFakeDone || this.fake.isTls === false) {
         const buffer = this.fake.buffer.length ? Buffer.concat([this.fake.flush(), chunk]) : chunk
         const ready = this.stream.write(buffer)
         if (ready) {
@@ -63,7 +68,16 @@ class FakeTls extends Transform {
         this.stream.once('drain', () => callback())
         return
       }
-      const packets = this.fake.parse(chunk)
+      const packets = this.fake.parse(chunk, encoding)
+      if (!this.fake.isTls) {
+        const buffer = this.fake.buffer.length ? Buffer.concat([this.fake.flush(), chunk]) : chunk
+        const ready = this.stream.write(buffer)
+        if (ready) {
+          return callback()
+        }
+        this.stream.once('drain', () => callback())
+        return
+      }
       if (!packets.length) {
         return callback()
       }
