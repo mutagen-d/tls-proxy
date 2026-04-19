@@ -16,10 +16,10 @@ const server = createProxyServer({
     const isTls = req && req.method.toLowerCase() === 'connect' && dstPort !== 80;
     const socket = net.createConnection(config.remote.port, config.remote.host)
     logger.log(`proxy: ${dstHost}:${dstPort}`)
-    const conn = new Defer()
-    socket.on('connect', () => conn.resolve())
-    socket.on('error', (err) => conn.reject(err))
-    await conn.promise
+    const connDefer = new Defer()
+    socket.on('connect', () => connDefer.resolve())
+    socket.on('error', (err) => connDefer.reject(err))
+    await connDefer.promise
     const address = getAddress(socket)
     const srcPort = address.local.port
     const srcHost = await fetchIP()
@@ -47,4 +47,4 @@ const server = createProxyServer({
   }
 })
 
-server.listen(config.local.port, '127.0.0.1', () => logger.log('server listening port', config.local.port))
+server.listen(config.local.port, '0.0.0.0', () => logger.log('server listening port', config.local.port))

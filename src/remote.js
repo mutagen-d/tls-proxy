@@ -43,30 +43,37 @@ const sites = {
     return `${address.ip}:${address.port}`
   },
 }
+const WAIT = {
+  minMs: 100_000,
+  maxMs: 0,
+}
 /**
  * @param {IProxyOptions} opts
  * @param {(err?: null) => void} callback
  */
 const createProxyConnection = async (opts, callback) => {
-  const key = sites.setOption(opts, opts)
-  wss.events.emit(`waitWS:${key}`)
-  logger.log(`on-proxy ${JSON.stringify({ key, opts })}`)
+  const srcKey = sites.setOption(opts, opts)
+  const wait = {}
+  wss.events.emit(`waitWS:${srcKey}`, wait)
+  const dstKey = `${opts.dstHost}:${opts.dstPort}`
+  logger.log(`proxy_request ${srcKey} ${dstKey} +${wait.ms}ms (min = +${wait.minMs}ms, max = +${wait.maxMs}ms)`)
   const socket = net.createConnection(opts.dstPort, opts.dstHost)
+  socket.setTimeout(30_000, () => socket.destroy())
   socket.on('connect', () => {
-    logger.log('proxy-connected', key)
-    wss.events.emit(`connectWS:${key}`)
+    logger.log(`proxy_connected ${srcKey} ${dstKey}`)
+    wss.events.emit(`connectWS:${srcKey}`)
     callback()
   })
   socket.on('error', (err) => {
-    logger.log('proxy-error', err)
-    wss.events.emit(`errorWS:${key}`)
+    logger.log(`proxy_error ${srcKey} ${dstKey}`, err)
+    wss.events.emit(`errorWS:${srcKey}`)
     callback(err && err.message || 'failed')
   })
   const fakeTls = new FakeTls(socket, {
     fakeSni: opts.dstHost,
     realSni: config.fakeHost,
   })
-  sites[key].socket = fakeTls
+  sites[srcKey].socket = fakeTls
 }
 
 wss.events.onConnect((socket, logger) => {
@@ -77,26 +84,40 @@ server.on('connection', async (socket) => {
   socket.setTimeout(10_000, () => socket.destroy())
   const address = getAddress(socket)
   const key = sites.getKey(address.remote)
-  logger.log(`connected ${key} ${JSON.stringify(address)}`)
-  const waitWS = async (address, timeoutMs) => {
+  logger.log(`connected ${key}`)
+  socket.once('close', () => {
+    delete sites[key]
+    logger.log(`disconnected ${key}`)
+  })
+  let startTime
+  const waitWS = async (timeoutMs) => {
+    startTime = Date.now()
     const defer = new Defer()
     const eventName = `waitWS:${key}`
     const timer = setTimeout(() => {
       defer.reject('timeout')
       wss.events.off(eventName, onConnect)
     }, timeoutMs)
-    var onConnect = () => {
+    var onConnect = (obj) => {
       clearTimeout(timer)
+      const ms = Date.now() - startTime
+      WAIT.minMs = Math.min(ms, WAIT.minMs)
+      WAIT.maxMs = Math.max(ms, WAIT.maxMs)
+      if (obj) {
+        obj.ms = ms
+        obj.minMs = WAIT.minMs
+        obj.maxMs = WAIT.maxMs
+      }
       defer.resolve()
     }
     wss.events.once(eventName, onConnect)
     return defer.promise
   }
   try {
-    await waitWS(address.remote, 500)
-    logger.log(`---- waitWS ${key}`)
+    await waitWS(config.remote.waitMs)
   } catch (e) {
     const sock = net.createConnection(443, config.fakeHost)
+    sock.setTimeout(30_000, () => sock.destroy())
     sock.on('connect', () => {
       sock.pipe(socket)
       socket.pipe(sock)
@@ -105,14 +126,12 @@ server.on('connection', async (socket) => {
     return
   }
   const connectWS = async () => {
-    logger.log(`--- connectWS ${key}`)
     const opts = sites.getOptions(address.remote)
     opts.socket.pipe(socket)
     socket.pipe(opts.socket)
     wss.events.off(`errorWS:${key}`, errorWS)
   }
   const errorWS = async () => {
-    logger.log(`--- errorWS ${key}`)
     socket.destroy()
     wss.events.off(`connectWS:${key}`, connectWS)
   }
@@ -120,4 +139,4 @@ server.on('connection', async (socket) => {
   wss.events.once(`errorWS:${key}`, errorWS)
 })
 
-server.listen(config.remote.port, '127.0.0.1', () => logger.log('server listening port', config.remote.port))
+server.listen(config.remote.port, '0.0.0.0', () => logger.log('server listening port', config.remote.port))
