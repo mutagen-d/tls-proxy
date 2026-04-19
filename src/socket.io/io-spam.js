@@ -1,10 +1,14 @@
 const crypto = require('crypto')
+const { config } = require('../config')
 
 const createSpamer = (timer) => {
   /**
    * @param {import('socket.io').Socket | import('socket.io-client').Socket} socket
    */
   const start = (socket) => {
+    if (config.appEnv !== 'production') {
+      return
+    }
     const timeout = crypto.randomInt(20_000) + 5_000
     clearTimeout(timer)
     timer = setTimeout(() => {
