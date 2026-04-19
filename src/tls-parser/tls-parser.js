@@ -1,6 +1,7 @@
 const EventEmitter = require('events')
 const { TlsPacket } = require('./tls-packet')
 const { createLogger } = require('../tools/logger')
+const { config } = require('../config')
 
 let index = 0
 class TlsParser extends EventEmitter {
@@ -12,9 +13,14 @@ class TlsParser extends EventEmitter {
     this.sni = sni
     this.id = index.toString().padStart(6, '0')
     this.logger = createLogger(`TLS:${this.id}${sni ? `|${sni}` : ''}`)
+    if (config.appEnv === 'production') {
+      this.logger.disable()
+    }
     /** @type {Buffer} */
     this.buffer = Buffer.alloc(0)
-    this.handshakeComplete = false
+    this.clientHelloDone = false
+    this.serverHelloDone = false
+    this.handshakeDone = false
     /** @private */
     this.handshakeTypes = [
       'Handshake',
@@ -37,11 +43,27 @@ class TlsParser extends EventEmitter {
       packet.setSni(this.sni)
     }
     this.emit('packet', packet)
-    const prev = this.handshakeComplete
-    this.handshakeComplete = !this.handshakeTypes.includes(packet.contentType.name)
-    if (!prev && this.handshakeComplete) {
+    const prev = this.handshakeDone
+    this.handshakeDone = !this.handshakeTypes.includes(packet.contentType.name)
+    if (!prev && this.handshakeDone) {
       this.emit('handshake_complete')
     }
+    if (packet.isClientHello()) {
+      this.logger.log('CLIENT_HELLO DONE')
+      this.clientHelloDone = true
+    } else if (packet.isServerHello()) {
+      this.logger.log('SERVER_HELLO DONE')
+      this.serverHelloDone = true
+    }
+  }
+
+  flush() {
+    if (!this.buffer.length) {
+      return
+    }
+    const buffer = this.buffer
+    this.buffer = Buffer.alloc(0)
+    return buffer
   }
 
   parse(chunk) {

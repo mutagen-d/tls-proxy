@@ -62,6 +62,10 @@ class TlsPacket {
     return this.contentType.name === 'Handshake' && this.body.value?.some(h => h.type.name === 'ClientHello')
   }
 
+  isServerHello() {
+    return this.contentType.name === 'Handshake' && this.body.value?.some(h => h.type.name === 'ServerHello')
+  }
+
   getSni() {
     const ext = this.getExtension('server_name')
     return ext ? ext.getSni() : null

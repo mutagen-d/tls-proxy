@@ -28,6 +28,11 @@ class FakeTls extends Transform {
 
   /** @private */
   _onData(chunk) {
+    if (this.isRealDone) {
+      const buffer = this.real.buffer.length ? Buffer.concat([this.real.flush(), chunk]) : chunk
+      this.push(buffer)
+      return
+    }
     const packets = this.real.parse(chunk)
     if (packets.length) {
       const buffer = Buffer.concat(packets.map(v => v.toBuffer()))
@@ -35,8 +40,29 @@ class FakeTls extends Transform {
     }
   }
 
+  get isFakeDone() {
+    return this.fake.clientHelloDone
+      || this.fake.serverHelloDone
+      || this.fake.handshakeDone
+  }
+
+  get isRealDone() {
+    return this.real.clientHelloDone
+      || this.real.serverHelloDone
+      || this.real.handshakeDone
+  }
+
   _transform(chunk, encoding, callback) {
     try {
+      if (this.isFakeDone) {
+        const buffer = this.fake.buffer.length ? Buffer.concat([this.fake.flush(), chunk]) : chunk
+        const ready = this.stream.write(buffer)
+        if (ready) {
+          return callback()
+        }
+        this.stream.once('drain', () => callback())
+        return
+      }
       const packets = this.fake.parse(chunk)
       if (!packets.length) {
         return callback()
