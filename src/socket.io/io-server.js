@@ -1,8 +1,8 @@
 const http = require('http')
-const EventEmitter = require('events')
+const { EventEmitter } = require('../tools/events')
 const { Server } = require('socket.io')
 const { config } = require('../config')
-const { getAddress } = require('./get-address')
+const { getAddress } = require('../tools/get-address')
 const { createLogger } = require('../tools/logger')
 const { createSpamer } = require('./io-spam')
 
@@ -15,11 +15,14 @@ const events = new EventEmitter()
 
 const logger = createLogger('Socket.IO')
 const server = http.createServer()
-const io = new Server(server, { path: '/10chat.io' })
+const io = new Server(server, { path: config.ws.path })
 
-io.of('/chat').use((socket, next) => {
+
+io.of(config.ws.namespace).use((socket, next) => {
   const auth = socket.handshake.auth
-  if (auth.token === config.authToken) {
+  if (auth.token === config.ws.token) {
+    socket.data ||= {}
+    socket.data.ip = auth.ip;
     return next()
   }
   const err = new Error('unauthorized')
@@ -29,15 +32,15 @@ io.of('/chat').use((socket, next) => {
 const EVENTS = Object.freeze({
   connect: 'connect',
 })
-io.of('/chat').on('connect', (socket) => {
+io.of(config.ws.namespace).on('connect', (socket) => {
   const address = getAddress(socket)
-  const ip = address.remote.ip
+  const ip = socket.data.ip || address.remote.ip
   logger.log(ip, `connected ${address}`)
   events.emit(EVENTS.connect, socket, logger)
   const spamer = createSpamer()
   spamer.start(socket)
   socket.onAny((event, ...args) => {
-    logger.log(ip, 'event:', event)
+    logger.log(ip, 'event:', event, ...args)
   })
   socket.on('disconnect', (reason) => {
     logger.log(ip, 'disconnected', reason)
@@ -52,6 +55,14 @@ events.onConnect = (callback) => {
   return { remove }
 }
 
-server.listen(config.port, '127.0.0.1', () => logger.log('server listening port', config.port))
+server.listen(config.ws.port, '127.0.0.1', () => {
+  logger.log('server listening port', config.ws.port)
+  logger.log('server namespace', {
+    url: config.ws.url,
+    port: config.ws.port,
+    namespace: config.ws.namespace,
+    path: config.ws.path,
+  })
+})
 
 module.exports = { events }
