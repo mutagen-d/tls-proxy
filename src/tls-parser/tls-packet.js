@@ -14,6 +14,8 @@ class TlsPacket {
   body
   /** @type {ITlsPacketDto['timestamp']} */
   timestamp
+  /** @type {ITlsPacketDto['buffer']} */
+  buffer
   /**
    * @param {Partial<ITlsPacketDto>} [params]
    */
@@ -34,6 +36,9 @@ class TlsPacket {
     if (!this.isClientHello()) {
       if (bodyOnly) {
         return this.body.buffer
+      }
+      if (this.buffer) {
+        return this.buffer
       }
       const buffer = Buffer.concat([Buffer.alloc(5), this.body.buffer])
       buffer.writeUint8(this.contentType.value)
@@ -81,7 +86,7 @@ class TlsPacket {
    */
   static parse(buffer) {
     const packetDto = TlsPacket.parseDto(buffer)
-    return packetDto ? new TlsPacket(packetDto) : null
+    return new TlsPacket(packetDto)
   }
 
   /**
@@ -110,6 +115,7 @@ class TlsPacket {
         value: contentTypeName === 'Handshake' ? TlsHandshake.parse(fragment) : undefined,
       },
       timestamp: Date.now(),
+      buffer,
     }
     return packetDto
   }

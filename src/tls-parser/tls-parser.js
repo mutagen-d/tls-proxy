@@ -4,11 +4,14 @@ const { createLogger } = require('../tools/logger')
 
 let index = 0
 class TlsParser extends EventEmitter {
-  constructor() {
+  /** @param {string} [sni] */
+  constructor(sni) {
     super()
     index += 1
+    /** @private */
+    this.sni = sni
     this.id = index.toString().padStart(6, '0')
-    this.logger = createLogger(`TLS:${this.id}`)
+    this.logger = createLogger(`TLS:${this.id}${sni ? `|${sni}` : ''}`)
     /** @type {Buffer} */
     this.buffer = Buffer.alloc(0)
     this.handshakeComplete = false
@@ -30,6 +33,9 @@ class TlsParser extends EventEmitter {
     if (!packet) {
       return
     }
+    if (this.sni && packet.isClientHello()) {
+      packet.setSni(this.sni)
+    }
     this.emit('packet', packet)
     const prev = this.handshakeComplete
     this.handshakeComplete = !this.handshakeTypes.includes(packet.contentType.name)
@@ -40,6 +46,7 @@ class TlsParser extends EventEmitter {
 
   parse(chunk) {
     let buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk
+    const records = []
     while (buffer.length >= 5) {
       // const contentType = buffer[0];
       // const version = buffer.readUInt16BE(1);
@@ -52,13 +59,14 @@ class TlsParser extends EventEmitter {
       const i = records.length
       records.push(packet)
       this.onPacket(packet)
-      console.log(this.id, `[${i}] packet`, packet.contentType.name, packet.body.value?.map(h => h.type.name), packet.body.buffer.length)
+      const sni = packet.getSni()
+      this.logger.log(`[${i}] packet`, packet.contentType.name, packet.body.value?.map(h => h.type.name), packet.body.buffer.length, sni || '')
 
       buffer = buffer.slice(5 + length);
     }
     this.buffer = buffer
     const i = records.length
-    console.log(this.id, `[${i}] leftOverLen`, this.buffer.length)
+    this.logger.log(`[${i}] leftOverLen`, this.buffer.length)
     return records
   }
 }
