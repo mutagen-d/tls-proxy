@@ -1,6 +1,10 @@
+const { config } = require('../config')
 const { createLogger } = require('./logger')
 
 const logger = createLogger('events')
+if (config.appEnv === 'production') {
+  logger.disable()
+}
 class EventEmitter {
   constructor() {
     /** 

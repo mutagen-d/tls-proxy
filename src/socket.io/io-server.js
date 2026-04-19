@@ -40,7 +40,9 @@ io.of(config.ws.namespace).on('connect', (socket) => {
   const spamer = createSpamer()
   spamer.start(socket)
   socket.onAny((event, ...args) => {
-    logger.log(ip, 'event:', event, ...args)
+    if (config.appEnv !== 'production') {
+      logger.log(ip, 'event:', event, ...args)
+    }
   })
   socket.on('disconnect', (reason) => {
     logger.log(ip, 'disconnected', reason)
