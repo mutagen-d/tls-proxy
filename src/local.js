@@ -39,7 +39,6 @@ const server = createProxyServer({
       return socket
     }
     logger.log(`fakeTLS: ${JSON.stringify({ fakeSni: config.fakeHost, realSni: dstHost })}`)
-    return socket
     const fakeTls = new FakeTls(socket, {
       fakeSni: config.fakeHost,
       realSni: dstHost,

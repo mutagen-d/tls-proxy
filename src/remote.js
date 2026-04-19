@@ -62,12 +62,11 @@ const createProxyConnection = async (opts, callback) => {
     wss.events.emit(`errorWS:${key}`)
     callback(err && err.message || 'failed')
   })
-  // const fakeTls = new FakeTls(socket, {
-  //   fakeSni: opts.dstHost,
-  //   realSni: config.fakeHost,
-  // })
-  // sites[key].socket = fakeTls
-  sites[key].socket = socket
+  const fakeTls = new FakeTls(socket, {
+    fakeSni: opts.dstHost,
+    realSni: config.fakeHost,
+  })
+  sites[key].socket = fakeTls
 }
 
 wss.events.onConnect((socket, logger) => {
