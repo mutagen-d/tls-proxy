@@ -1,4 +1,5 @@
 const net = require('net')
+const ss = require('socket.io-stream')
 const wss = require('./socket.io/io-server')
 const { getAddress } = require('./tools/get-address')
 const { config } = require('./config')
@@ -81,6 +82,12 @@ const createProxyConnection = async (opts, callback) => {
 
 wss.events.onConnect((socket, logger) => {
   socket.on('proxy-connection', createProxyConnection)
+  ss(socket).on('proxy-stream', (stream, opts, callback) => {
+    const socket = net.createConnection(opts.dstPort, opts.dstHost)
+    socket.on('connect', () => callback())
+    socket.on('error', (err) => callback(err && (err.message || err)))
+    socket.pipe(stream).pipe(socket)
+  })
 })
 
 server.on('connection', async (socket) => {

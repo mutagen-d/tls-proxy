@@ -1,4 +1,5 @@
 const net = require('net')
+const ss = require('socket.io-stream')
 const { createProxyServer } = require('@mutagen-d/node-proxy-server')
 const { config } = require('./config')
 const { connect } = require('./socket.io/io-client')
@@ -16,12 +17,13 @@ const server = createProxyServer({
     const isHttp = Boolean(req && req.method)
     const isTls = isHttp && req.method.toLowerCase() === 'connect' && dstPort !== 80;
     if (dstPort === 80) {
-      const sock = net.createConnection(dstPort, dstHost)
       const defer = new Defer()
-      sock.on('connect', () => defer.resolve())
-      sock.on('error', (err) => defer.reject(err))
+      const stream = ss.createStream()
+      ss(ws).emit('proxy-stream', stream, opts, (err) => {
+        return err ? defer.reject(err) : defer.resolve()
+      })
       await defer.promise
-      return sock
+      return stream
     }
     const socket = net.createConnection(config.remote.port, config.remote.host)
     const dstKey = `${dstHost}:${dstPort}`
@@ -56,3 +58,19 @@ const server = createProxyServer({
 
 server.on('error', (err) => logger.log('ERROR:', err))
 server.listen(config.local.port, '0.0.0.0', () => logger.log('server listening port', config.local.port))
+
+const wsproxy = createProxyServer({
+  createProxyConnection: async (opts) => {
+    const defer = new Defer()
+    const stream = ss.createStream()
+    ss(ws).emit('proxy-stream', stream, opts, (err) => {
+      return err ? defer.reject(err) : defer.resolve()
+    })
+    await defer.promise
+    return stream
+  }
+})
+
+const port = +config.local.port + 1
+wsproxy.on('error', (err) => logger.log('ERROR:', err))
+wsproxy.listen(port, '0.0.0.0', () => logger.log('server listening port', port, '(ws)'))
