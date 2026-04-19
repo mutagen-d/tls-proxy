@@ -9,11 +9,36 @@ const { FakeTls } = require('./tls-parser/fake-tls')
 const { createLogger } = require('./tools/logger')
 const { fetchIP } = require('./tools/fetch-ip')
 
+const blackList = config.blackList || []
+const directList = config.directList || []
+
+/**
+ * @param {string} host 
+ * @param {string[]} list 
+ */
+const isMatch = (host, list) => {
+  if (!host) {
+    return false
+  }
+  return list.includes(host) || list.some(h => host.endsWith(h))
+}
+
 const logger = createLogger('local')
 const ws = connect()
 const server = createProxyServer({
   createProxyConnection: async (opts, req) => {
     const { dstHost, dstPort } = opts
+    if (isMatch(dstHost, blackList)) {
+      throw new Error('forbidden')
+    }
+    if (isMatch(dstHost, directList)) {
+      const sock = net.createConnection(dstPort, dstHost)
+      const defer = new Defer()
+      sock.on('connect', () => defer.resolve())
+      sock.on('error', (err) => defer.reject(err))
+      await defer.promise
+      return sock
+    }
     const isHttp = Boolean(req && req.method)
     const isTls = isHttp && req.method.toLowerCase() === 'connect' && dstPort !== 80;
     if (dstPort === 80) {

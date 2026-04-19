@@ -1,5 +1,10 @@
 require('dotenv').config()
 
+/** @type {string[]} */
+const blackList = []
+/** @type {string[]} */
+const directList = []
+
 /** @type {'development' | 'production'} */
 const appEnv = process.env.APP_ENV || 'production'
 const isProduction = () => appEnv === 'production'
@@ -47,6 +52,8 @@ const config = Object.freeze({
   ws,
   remote,
   local,
+  blackList,
+  directList,
 })
 
 module.exports = { config }
