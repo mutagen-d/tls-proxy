@@ -42,7 +42,7 @@ class TlsPacket {
       }
       const buffer = Buffer.concat([Buffer.alloc(5), this.body.buffer])
       buffer.writeUint8(this.contentType.value)
-      buffer.writeUint16BE(parseInt(this.version.value, 16), 1)
+      buffer.writeUint16BE(this.version.value, 1)
       buffer.writeUint16BE(this.body.buffer.length, 3)
       return buffer
     }
@@ -53,7 +53,7 @@ class TlsPacket {
     const length = body.length
     const buffer = Buffer.concat([Buffer.alloc(5), body])
     buffer.writeUint8(this.contentType.value)
-    buffer.writeUint16BE(parseInt(this.version.value, 16), 1)
+    buffer.writeUint16BE(this.version.value, 1)
     buffer.writeUint16BE(length, 3)
     return buffer
   }
@@ -115,7 +115,7 @@ class TlsPacket {
         value: contentTypeName === 'Handshake' ? TlsHandshake.parse(fragment) : undefined,
       },
       timestamp: Date.now(),
-      buffer,
+      buffer: buffer.slice(0, 5 + length),
     }
     return packetDto
   }
