@@ -41,7 +41,9 @@ const connect = () => {
     logger.error('connect_error', err.message)
   })
   socket.onAny((event, ...args) => {
-    logger.log('event:', event)
+    if (config.appEnv !== 'production') {
+      logger.log('event:', event)
+    }
   })
   return socket
 }
