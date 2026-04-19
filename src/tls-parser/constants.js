@@ -7,6 +7,14 @@ const TLS_VERSIONS = Object.freeze({
   0xfefd: 'DTLSv1.2',
   0xfeff: 'DTLSv1.3'
 })
+const getTlsVersion = (version) => {
+  const major = (version >> 8) & 0xff;
+  const minor = version & 0xff;
+  /** @type {TLS_VERSIONS[keyof TLS_VERSIONS] | `0x${string} (${number}.${number})`} */
+  const name = TLS_VERSIONS[version] || `0x${version.toString(16)} (${major}.${minor})`;
+  return name
+}
+
 /**
  * RFC 8446 / RFC 5246 constants
  */
@@ -15,7 +23,14 @@ const CONTENT_TYPES = Object.freeze({
   21: 'Alert',
   22: 'Handshake',
   23: 'ApplicationData',
+  24: 'Heartbeat',
 });
+
+const getContentType = (contentType) => {
+  /** @type {CONTENT_TYPES[keyof CONTENT_TYPES] | `Unknown${number}`} */
+  const name = CONTENT_TYPES[contentType]
+  return name || `Unknown${contentType}`
+}
 
 const HANDSHAKE_TYPES = Object.freeze({
   0: 'HelloRequest',
@@ -35,6 +50,11 @@ const HANDSHAKE_TYPES = Object.freeze({
   25: 'KeyUpdate',
   26: 'CompressedCertificate'
 });
+const getHandshakeType = (type) => {
+  /** @type {HANDSHAKE_TYPES[keyof HANDSHAKE_TYPES] | `Unknown`} */
+  const name = HANDSHAKE_TYPES[type] || `Unknown`
+  return name
+}
 
 const EXTENSION_TYPES = Object.freeze({
   0: 'server_name',
@@ -64,6 +84,11 @@ const EXTENSION_TYPES = Object.freeze({
   57: 'quic_transport_parameters',
   65281: 'renegotiation_info'
 });
+const getExtensionType = (type) => {
+  /** @type {EXTENSION_TYPES[keyof EXTENSION_TYPES] | `Unknown`} */
+  const name = EXTENSION_TYPES[type] || `Unknown`
+  return name
+}
 
 const CIPHER_SUITES = Object.freeze({
   0x1301: 'TLS_AES_128_GCM_SHA256',
@@ -79,6 +104,11 @@ const CIPHER_SUITES = Object.freeze({
   0xcca9: 'TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256',
   // Add more as needed
 });
+const getCipherSuite = (type) => {
+  /** @type {CIPHER_SUITES[keyof CIPHER_SUITES] | `Unknown`} */
+  const name = CIPHER_SUITES[type] || `Unknown`
+  return name
+}
 
 module.exports = {
   TLS_VERSIONS,
@@ -86,4 +116,9 @@ module.exports = {
   HANDSHAKE_TYPES,
   EXTENSION_TYPES,
   CIPHER_SUITES,
+  getContentType,
+  getTlsVersion,
+  getHandshakeType,
+  getExtensionType,
+  getCipherSuite,
 }
