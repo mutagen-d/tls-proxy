@@ -68,7 +68,6 @@ const server = createProxyServer({
       def1.reject(err)
       logger.log(`tcp error: ${id} ${remoteKey}`, err)
     })
-    // await def1.promise
     const def2 = new Defer()
     ws.emit('proxy-connect', { dstHost, dstPort, id }, (err) => {
       if (err) {
@@ -84,7 +83,8 @@ const server = createProxyServer({
     const address = getAddress(socket)
     const srcPort = address.local.port
     const srcHost = await fetchIP()
-    // await def2.promise
+    // 2026-04-22: дожидаемся, пока установится соединение
+    await def2.promise
     const def3 = new Defer()
     ws.emit('proxy-attach', { id, srcHost, srcPort }, (err) => {
       if (err) {
