@@ -1,4 +1,5 @@
 const net = require('net')
+const crypto = require('crypto')
 const ss = require('socket.io-stream')
 const { createProxyServer } = require('@mutagen-d/node-proxy-server')
 const { config } = require('./config')
@@ -8,6 +9,7 @@ const { Defer } = require('./tools/defer')
 const { FakeTls } = require('./tls-parser/fake-tls')
 const { createLogger } = require('./tools/logger')
 const { fetchIP } = require('./tools/fetch-ip')
+const { Duration } = require('./tools/duration')
 
 const blackList = config.blackList || []
 const directList = config.directList || []
@@ -27,6 +29,7 @@ const logger = createLogger('local')
 const ws = connect()
 const server = createProxyServer({
   createProxyConnection: async (opts, req) => {
+    const duration = new Duration()
     const { dstHost, dstPort } = opts
     if (isMatch(dstHost, blackList)) {
       throw new Error('forbidden')
@@ -50,29 +53,51 @@ const server = createProxyServer({
       await defer.promise
       return stream
     }
-    const socket = net.createConnection(config.remote.port, config.remote.host)
     const dstKey = `${dstHost}:${dstPort}`
-    logger.log(`proxy: ${dstKey} ${isTls ? '(tls)' : ''}`)
-    const connDefer = new Defer()
-    socket.on('connect', () => connDefer.resolve())
-    socket.on('error', (err) => connDefer.reject(err))
-    await connDefer.promise
+    const id = crypto.randomUUID()
+    logger.log(`proxy: ${id} ${dstKey} ${isTls ? '(tls)' : ''}`)
+    //
+    const remoteKey = `${config.remote.host}:${config.remote.port}`
+    const socket = net.createConnection(config.remote.port, config.remote.host)
+    const def1 = new Defer()
+    socket.on('connect', () => {
+      def1.resolve()
+      logger.log(`tcp connected: ${id} ${remoteKey}`)
+    })
+    socket.on('error', (err) => {
+      def1.reject(err)
+      logger.log(`tcp error: ${id} ${remoteKey}`, err)
+    })
+    // await def1.promise
+    const def2 = new Defer()
+    ws.emit('proxy-connect', { dstHost, dstPort, id }, (err) => {
+      if (err) {
+        logger.log('proxy-connect Error:', id, dstKey, err)
+        def2.reject(err)
+        socket.destroy()
+      } else {
+        logger.log('proxy-connect done', id, dstKey)
+        def2.resolve()
+      }
+    })
+    await def1.promise
     const address = getAddress(socket)
     const srcPort = address.local.port
     const srcHost = await fetchIP()
-    const defer = new Defer()
-    ws.emit('proxy-connection', { dstHost, dstPort, srcHost, srcPort }, (err) => {
+    // await def2.promise
+    const def3 = new Defer()
+    ws.emit('proxy-attach', { id, srcHost, srcPort }, (err) => {
       if (err) {
-        logger.log('proxy-error', err)
-        defer.reject(err)
+        logger.log('proxy-attach Error:', err)
+        def3.reject(err)
         socket.destroy()
       } else {
-        logger.log('proxy-connected', dstKey)
-        defer.resolve()
+        logger.log('proxy-attach done', dstKey)
+        def3.resolve()
       }
     })
-    await defer.promise
-    logger.log(`fakeTLS: ${JSON.stringify({ fakeSni: config.fakeHost, realSni: dstHost })}`)
+    await Promise.all([def2.promise, def3.promise])
+    logger.log(`fake-tls: ${JSON.stringify({ fakeSni: config.fakeHost, realSni: dstHost })}`, duration.format())
     const fakeTls = new FakeTls(socket, {
       fakeSni: config.fakeHost,
       realSni: dstHost,
