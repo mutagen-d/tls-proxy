@@ -41,7 +41,14 @@ const local = {
   port: parseInt(process.env.LOCAL_PORT || LOCAL_PORT, 10),
 }
 
+const aes = Object.freeze({
+  ivLength: 16,
+  algorithm: 'aes-256-gcm',
+  secret: process.env.WS_TOKEN,
+})
+
 const config = Object.freeze({
+  aes,
   /**
    * - `"development"` - use `port` for http (unsecure) connection to `"http://localhost:${WS_PORT}"`
    * - `"production"` - use `host` for https (secure) connection to `"https://${WS_HOST}"`

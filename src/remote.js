@@ -6,82 +6,122 @@ const { config } = require('./config')
 const { createLogger } = require('./tools/logger')
 const { FakeTls } = require('./tls-parser/fake-tls')
 const { Defer } = require('./tools/defer')
+const { EventEmitter } = require('./tools/events')
+const { Duration } = require('./tools/duration')
 
 const logger = createLogger('remote')
 const server = net.createServer()
-/**
- * @typedef {{
- *  dstHost: string
- *  dstPort: string | number
- *  srcHost: string
- *  srcPort: string | number
- * }} IProxyOptions
- */
-/**
- * @typedef {IProxyOptions & { socket?: import('net').Socket} } ISiteOptions
- */
+const localEmitter = new EventEmitter()
+
 /**
  * @type {{
- *  [address: string]: ISiteOptions
- *  getOptions: (address: { ip: string; port: string }) => ISiteOptions | undefined
- *  getKey: (address: { ip: string; port: string }) => string
- *  setOption: (address: { ip: string; port: string } | { srcHost: string; srcPort: string }, opts: ISiteOptions) => string
+ *  [id: string]: {
+ *    id: string
+ *    host: string;
+ *    port: number;
+ *    duration: Duration
+ *    socket: FakeTls
+ *  }
  * }}
  */
-const sites = {
-  setOption: (address, opts) => {
-    const ip = address.ip || address.srcHost
-    const port = address.port || address.srcPort
-    const key = sites.getKey({ ip, port })
-    sites[key] = opts
-    return key
-  },
-  getOptions: (address) => {
-    const key = sites.getKey(address)
-    return sites[key]
-  },
-  getKey: (address) => {
-    return `${address.ip}:${address.port}`
-  },
-}
-const WAIT = {
-  minMs: 100_000,
-  maxMs: 0,
+const PROXIES = {}
+/**
+ * @type {{
+ *  [port: string]: net.Socket
+ * }}
+ */
+const SOCKETS = {}
+
+/**
+ * @type {{
+ *  [port: string]: {
+ *    id: string
+ *    port: number
+ *  }
+ * }}
+ */
+const ATTACHES = {}
+
+const createFakeTls = (socket, dstHost) => {
+  const stream = new FakeTls(socket, { fakeSni: dstHost, realSni: config.fakeHost })
+  stream.on('error', (err) => logger.log('fake-tls Error:', err))
+  return stream
 }
 /**
- * @param {IProxyOptions} opts
+ * @param {{ dstHost: string; dstPort: number; id: string }} opts
  * @param {(err?: null) => void} callback
  */
-const createProxyConnection = async (opts, callback) => {
-  const srcKey = sites.setOption(opts, opts)
-  const wait = {}
-  wss.events.emit(`waitWS:${srcKey}`, wait)
-  const dstKey = `${opts.dstHost}:${opts.dstPort}`
-  logger.log(`proxy_request ${srcKey} ${dstKey} +${wait.ms}ms (min = +${wait.minMs}ms, max = +${wait.maxMs}ms)`)
-  const socket = net.createConnection(opts.dstPort, opts.dstHost)
+const connectProxy = async (opts, callback) => {
+  const { dstHost, dstPort, id } = opts
+  const duration = new Duration()
+
+  const socket = net.createConnection(dstPort, dstHost)
   socket.setTimeout(30_000, () => socket.destroy())
-  socket.on('connect', () => {
-    logger.log(`proxy_connected ${srcKey} ${dstKey}`)
-    wss.events.emit(`connectWS:${srcKey}`)
+  PROXIES[id] = { id, host: dstHost, port: dstPort, duration }
+  const data = PROXIES[id]
+  /** @type {FakeTls} */
+  let fakeTls
+
+  const dstKey = `${dstHost}:${dstPort}`
+  logger.log(`proxy-request ${id} ${dstKey}`)
+
+  socket.once('connect', () => {
+    logger.log(`proxy-connected ${id} ${dstKey} ${duration.format()}`)
+    fakeTls = createFakeTls(socket, dstHost)
+    data.socket = fakeTls
     callback()
+    localEmitter.emit(`proxy:${id}`)
   })
-  socket.on('error', (err) => {
-    logger.log(`proxy_error ${srcKey} ${dstKey}`, err)
-    wss.events.emit(`errorWS:${srcKey}`)
+  socket.once('error', (err) => {
+    logger.log(`proxy-error ${id} ${dstKey}`, err)
     callback(err && err.message || 'failed')
   })
-  const fakeTls = new FakeTls(socket, {
-    fakeSni: opts.dstHost,
-    realSni: config.fakeHost,
+  socket.once('close', () => {
+    delete PROXIES[id]
+    if (fakeTls) {
+      try {
+        fakeTls.destroy()
+      } catch (e) {
+        logger.log('fake-tls destroy', e)
+      }
+    }
   })
-  fakeTls.on('error', (err) => {
-    logger.log('FAKE_TLS Error:', err)
-  })
-  sites[srcKey].socket = fakeTls
+}
+
+/**
+ * @param {{ id: string; srcHost: string; srcPort: number }} opts 
+ * @param {(err?: any) => any} callback 
+ */
+async function attachProxy(opts, callback) {
+  const { srcHost, srcPort, id } = opts
+  const att = ATTACHES[srcPort] = { id, port: srcPort }
+  if (!PROXIES[id] || !PROXIES[id].socket) {
+    const def = new Defer()
+    const sub = localEmitter.once(`proxy:${id}`, () => def.resolve())
+    setTimeout(() => def.resolve('timeout'), 10_000)
+    const res = await def.promise
+    sub.remove()
+    if (res === 'timeout') {
+      return callback('timeout')
+    }
+  }
+  try {
+    const proxy = PROXIES[id]
+    const socket = SOCKETS[srcPort]
+    proxy.socket.pipe(socket)
+    socket.pipe(proxy.socket)
+    const info = { ...att, host: `${proxy.host}:${proxy.port}` }
+    logger.log(`proxy-attached ${JSON.stringify(info)} ${proxy.duration.format()}`)
+    callback()
+  } catch (err) {
+    logger.log(`proxy-attach-error ${id}:`, err)
+    callback(err && err.message || err)
+  }
 }
 
 wss.events.onConnect((socket, logger) => {
-  socket.on('proxy-connection', createProxyConnection)
+  socket.on('proxy-connect', connectProxy)
+  socket.on('proxy-attach', attachProxy)
   ss(socket).on('proxy-stream', (stream, opts, callback) => {
     const socket = net.createConnection(opts.dstPort, opts.dstHost)
     socket.on('connect', () => callback())
@@ -90,68 +130,45 @@ wss.events.onConnect((socket, logger) => {
   })
 })
 
-server.on('connection', async (socket) => {
-  socket.setTimeout(10_000, () => socket.destroy())
-  const address = getAddress(socket)
-  const key = sites.getKey(address.remote)
-  logger.log(`connected ${key}`)
-  socket.once('close', () => {
-    delete sites[key]
-    logger.log(`disconnected ${key}`)
-  })
-  socket.on('error', (err) => {
-    logger.log('NET_SOCKET Error:', err)
-  })
-  let startTime
-  const waitWS = async (timeoutMs) => {
-    startTime = Date.now()
-    const defer = new Defer()
-    const eventName = `waitWS:${key}`
-    const timer = setTimeout(() => {
-      defer.reject('timeout')
-      wss.events.off(eventName, onConnect)
-    }, timeoutMs)
-    var onConnect = (obj) => {
-      clearTimeout(timer)
-      const ms = Date.now() - startTime
-      WAIT.minMs = Math.min(ms, WAIT.minMs)
-      WAIT.maxMs = Math.max(ms, WAIT.maxMs)
-      if (obj) {
-        obj.ms = ms
-        obj.minMs = WAIT.minMs
-        obj.maxMs = WAIT.maxMs
-      }
-      defer.resolve()
+const connectFakeHost = (socket, data, duration) => {
+  duration = duration || new Duration()
+  const fake = net.createConnection(443, config.fakeHost)
+  fake.setTimeout(30_000, () => fake.destroy())
+  fake.once('connect', () => {
+    logger.log(`active-probe connected ${config.fakeHost}:443 ${duration.format()}`)
+    if (data) {
+      fake.write(data)
     }
-    wss.events.once(eventName, onConnect)
-    return defer.promise
-  }
-  try {
-    await waitWS(config.remote.waitMs)
-  } catch (e) {
-    const sock = net.createConnection(443, config.fakeHost)
-    sock.setTimeout(30_000, () => sock.destroy())
-    sock.on('connect', () => {
-      sock.pipe(socket)
-      socket.pipe(sock)
-    })
-    sock.on('error', () => socket.destroy()) 
-    return
-  }
-  const connectWS = async () => {
-    const opts = sites.getOptions(address.remote)
-    opts.socket.pipe(socket)
-    socket.pipe(opts.socket)
-    wss.events.off(`errorWS:${key}`, errorWS)
-  }
-  const errorWS = async () => {
+    fake.pipe(socket)
+    socket.pipe(fake)
+  })
+  fake.once('error', (err) => {
+    logger.log(`active-probe error ${config.fakeHost}:443:`, err)
     socket.destroy()
-    wss.events.off(`connectWS:${key}`, connectWS)
-  }
-  wss.events.once(`connectWS:${key}`, connectWS)
-  wss.events.once(`errorWS:${key}`, errorWS)
+  })
+}
+
+server.on('connection', async (socket) => {
+  const duration = new Duration()
+  socket.setTimeout(30_000, () => socket.destroy())
+  const address = getAddress(socket)
+  const srcPort = address.remote.port
+  SOCKETS[srcPort] = socket
+  socket.once('close', () => {
+    delete SOCKETS[srcPort]
+    const att = delete ATTACHES[srcPort]
+    logger.log(`SOCKET[${srcPort}] closed ${duration.format()}${att ? ' (attached)' : ''}`)
+  })
+  socket.once('error', (err) => {
+    const att = ATTACHES[srcPort]
+    logger.log(`SOCKET[${srcPort}] Error:${att ? ` (id = ${att.id})` : ''}`, err)
+  })
+  socket.once('data', (data) => {
+    if (!ATTACHES[srcPort]) {
+      connectFakeHost(socket, data, duration)
+    }
+  })
 })
 
 server.on('error', (err) => logger.log('ERROR:', err))
-
 server.listen(config.remote.port, '0.0.0.0', () => logger.log('server listening port', config.remote.port))
