@@ -5,8 +5,11 @@ const logger = createLogger('events')
 if (config.appEnv === 'production') {
   logger.disable()
 }
+let count = 0
 class EventEmitter {
   constructor() {
+    /** @private */
+    this.id = ++count
     /** 
      * @protected
      * @type {{ [event: string]: Array<(...args: any) => any>}} */
@@ -18,7 +21,7 @@ class EventEmitter {
    * @param  {...any} args 
    */
   emit(event, ...args) {
-    logger.log(`emit "${event}"`)
+    logger.log(`emit[${this.id}] "${event}"`)
     const listeners = this.listeners[event] || []
     for (const listener of listeners) {
       try {
@@ -27,7 +30,7 @@ class EventEmitter {
           res.catch(e => logger.warn('error', e))
         }
       } catch (e) {
-        logger.warn('error', e)
+        logger.warn(`error[${this.id}]`, e)
       }
     }
     for (const listener of listeners) {

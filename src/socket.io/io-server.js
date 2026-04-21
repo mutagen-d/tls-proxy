@@ -35,17 +35,17 @@ const EVENTS = Object.freeze({
 io.of(config.ws.namespace).on('connect', (socket) => {
   const address = getAddress(socket)
   const ip = socket.data.ip || address.remote.ip
-  logger.log(ip, `connected ${address}`)
+  logger.log(`connected[${ip}] ${address}`)
   events.emit(EVENTS.connect, socket, logger)
   const spamer = createSpamer()
   spamer.start(socket)
   socket.onAny((event, ...args) => {
     if (config.appEnv !== 'production') {
-      logger.log(ip, 'event:', event, ...args)
+      logger.log(`event[${ip}]:`, event, ...args)
     }
   })
   socket.on('disconnect', (reason) => {
-    logger.log(ip, 'disconnected', reason)
+    logger.log(`disconnected[${ip}]`, reason)
     spamer.stop()
   })
 })
