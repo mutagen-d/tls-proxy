@@ -8,6 +8,7 @@ const { FakeTls } = require('./tls-parser/fake-tls')
 const { Defer } = require('./tools/defer')
 const { EventEmitter } = require('./tools/events')
 const { Duration } = require('./tools/duration')
+const { memoryUsage } = require('./tools/memory-usage')
 
 const logger = createLogger('remote')
 const server = net.createServer()
@@ -184,3 +185,8 @@ server.on('connection', async (socket) => {
 
 server.on('error', (err) => logger.log('ERROR:', err))
 server.listen(config.remote.port, '0.0.0.0', () => logger.log('server listening port', config.remote.port))
+
+setInterval(() => {
+  const mem = memoryUsage()
+  logger.log(`memory: ${JSON.stringify(mem)}`)
+}, 5000)
