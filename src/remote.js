@@ -21,6 +21,7 @@ const localEmitter = new EventEmitter()
  *    port: number;
  *    duration: Duration
  *    socket: FakeTls
+ *    srcPort?: number
  *  }
  * }}
  */
@@ -59,16 +60,13 @@ const connectProxy = async (opts, callback) => {
   socket.setTimeout(30_000, () => socket.destroy())
   PROXIES[id] = { id, host: dstHost, port: dstPort, duration }
   const data = PROXIES[id]
-  /** @type {FakeTls} */
-  let fakeTls
 
   const dstKey = `${dstHost}:${dstPort}`
   logger.log(`proxy-request ${id} ${dstKey}`)
 
   socket.once('connect', () => {
     logger.log(`proxy-connected ${id} ${dstKey} ${duration.format()}`)
-    fakeTls = createFakeTls(socket, dstHost)
-    data.socket = fakeTls
+    data.socket = createFakeTls(socket, dstHost)
     callback()
     localEmitter.emit(`proxy:${id}`)
   })
@@ -78,12 +76,8 @@ const connectProxy = async (opts, callback) => {
   })
   socket.once('close', () => {
     delete PROXIES[id]
-    if (fakeTls) {
-      try {
-        fakeTls.destroy()
-      } catch (e) {
-        logger.log('fake-tls destroy', e)
-      }
+    if (data.socket) {
+      data.socket.destroy()
     }
   })
 }
@@ -108,8 +102,10 @@ async function attachProxy(opts, callback) {
   try {
     const proxy = PROXIES[id]
     const socket = SOCKETS[srcPort]
+    proxy.srcPort = srcPort
     proxy.socket.pipe(socket)
     socket.pipe(proxy.socket)
+    socket.once('close', () => proxy.socket.destroy())
     const info = { ...att, host: `${proxy.host}:${proxy.port}` }
     logger.log(`proxy-attached ${JSON.stringify(info)} ${proxy.duration.format()}`)
     callback()
@@ -148,20 +144,36 @@ const connectFakeHost = (socket, data, duration) => {
   })
 }
 
+function removeSocket(srcPort) {
+  delete SOCKETS[srcPort]
+  const att = ATTACHES[srcPort]
+  delete ATTACHES[srcPort]
+  if (!att) {
+    return
+  }
+  const proxy = PROXIES[att.id]
+  delete PROXIES[att.id]
+  if (proxy && proxy.socket) {
+    proxy.socket.destroy()
+  }
+}
+
 server.on('connection', async (socket) => {
   const duration = new Duration()
   socket.setTimeout(30_000, () => socket.destroy())
   const address = getAddress(socket)
+  /** @type {number} */
   const srcPort = address.remote.port
   SOCKETS[srcPort] = socket
   socket.once('close', () => {
-    delete SOCKETS[srcPort]
-    const att = delete ATTACHES[srcPort]
+    const att = ATTACHES[srcPort]
+    removeSocket(srcPort)
     logger.log(`SOCKET[${srcPort}] closed ${duration.format()}${att ? ' (attached)' : ''}`)
   })
   socket.once('error', (err) => {
     const att = ATTACHES[srcPort]
     logger.log(`SOCKET[${srcPort}] Error:${att ? ` (id = ${att.id})` : ''}`, err)
+    socket.destroy()
   })
   socket.once('data', (data) => {
     if (!ATTACHES[srcPort]) {
