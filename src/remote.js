@@ -8,7 +8,7 @@ const { FakeTls } = require('./tls-parser/fake-tls')
 const { Defer } = require('./tools/defer')
 const { EventEmitter } = require('./tools/events')
 const { Duration } = require('./tools/duration')
-const { memoryUsage } = require('./tools/memory-usage')
+const { memoryUsage, heapStats } = require('./tools/memory-usage')
 
 const logger = createLogger('remote')
 const server = net.createServer()
@@ -202,9 +202,13 @@ const clear = () => {
     global.gc()
     logger.log(`GC triggered manually`)
   }
-  }
+}
 setInterval(() => {
   const mem = memoryUsage()
   logger.log(`memory: ${JSON.stringify(mem)}`)
 }, 5000)
 setInterval(() => clear(), 10_000);
+// setInterval(() => {
+//   const stats = heapStats()
+//   logger.log(`heapStats: ${JSON.stringify(stats, null, 2)}`)
+// }, 10_000);
