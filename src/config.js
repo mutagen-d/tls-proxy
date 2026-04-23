@@ -31,11 +31,18 @@ const ws = {
   path: '/10chat.io',
 }
 const remote = {
-  /** @type {string} */
+  /**
+   * @type {string}
+   * remote server host for local proxy to connect to
+   */
   host: process.env.REMOTE_HOST || '127.0.0.1',
+  /**
+   * remote server port
+   */
   port: parseInt(process.env.REMOTE_PORT || REMOTE_PORT, 10),
 }
 const local = {
+  /** local proxy server port */
   port: parseInt(process.env.LOCAL_PORT || LOCAL_PORT, 10),
 }
 

@@ -196,7 +196,15 @@ server.on('connection', async (socket) => {
 server.on('error', (err) => logger.log('ERROR:', err))
 server.listen(config.remote.port, '0.0.0.0', () => logger.log('server listening port', config.remote.port))
 
+
+const clear = () => {
+  if (global.gc) {
+    global.gc()
+    logger.log(`GC triggered manually`)
+  }
+  }
 setInterval(() => {
   const mem = memoryUsage()
   logger.log(`memory: ${JSON.stringify(mem)}`)
 }, 5000)
+setInterval(() => clear(), 10_000);
