@@ -13,7 +13,7 @@
     "@types/node": "^25.5.2"
   },
   "dependencies": {
-    "@mutagen-d/node-proxy-server": "^1.1.0",
+    "@mutagen-d/node-proxy-server": "^1.1.1",
     "dotenv": "^17.4.2",
     "msgpackr": "^1.11.8",
     "socket.io": "^4.8.3",

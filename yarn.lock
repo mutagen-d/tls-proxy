@@ -32,10 +32,10 @@
   resolved "https://registry.yarnpkg.com/@msgpackr-extract/msgpackr-extract-win32-x64/-/msgpackr-extract-win32-x64-3.0.3.tgz#0aa5502d547b57abfc4ac492de68e2006e417242"
   integrity sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ==
 
-"@mutagen-d/node-proxy-server@^1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@mutagen-d/node-proxy-server/-/node-proxy-server-1.1.0.tgz#a255967bcfc7746843e248997b1dcfb84a8b3f3b"
-  integrity sha512-YQl3onoErx2C2nhyfqtn1oe0WP03z8JnU6com17Z8g9lPi7NSEu/TRKss6YlwE+97vzx50zPDy/hdl1mA6Dpmg==
+"@mutagen-d/node-proxy-server@^1.1.1":
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/@mutagen-d/node-proxy-server/-/node-proxy-server-1.1.1.tgz#c17ecf766d81936e2dc8245a333a2ad739148fb4"
+  integrity sha512-wsJAMG3VxjfcxRchc+bh4YstxH0piaK9/hEtDVrvAD6NL6E2Dsmi1DIAYs74EZnBsuDcxOEseFgkFkAwSh6AkQ==
 
 "@socket.io/component-emitter@~3.1.0":
   version "3.1.2"
