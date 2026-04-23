@@ -34,6 +34,9 @@ class FakeTls extends Transform {
 
   /** @private */
   _onData(chunk) {
+    if (this.destroyed || this.closed) {
+      return
+    }
     if (this.isRealDone || this.real.isTls === false) {
       const buffer = this.real.buffer.length ? Buffer.concat([this.real.flush(), chunk]) : chunk
       this.push(buffer)
@@ -65,6 +68,9 @@ class FakeTls extends Transform {
 
   _transform(chunk, encoding, callback) {
     try {
+      if (this.stream.destroyed || this.stream.closed) {
+        return callback()
+      }
       if (this.isFakeDone || this.fake.isTls === false) {
         const buffer = this.fake.buffer.length ? Buffer.concat([this.fake.flush(), chunk]) : chunk
         const ready = this.stream.write(buffer)
