@@ -34,8 +34,6 @@ const remote = {
   /** @type {string} */
   host: process.env.REMOTE_HOST || '127.0.0.1',
   port: parseInt(process.env.REMOTE_PORT || REMOTE_PORT, 10),
-  /** wait for socket.io event */
-  waitMs: parseInt(process.env.WAIT_MS || 500, 10),
 }
 const local = {
   port: parseInt(process.env.LOCAL_PORT || LOCAL_PORT, 10),
@@ -48,6 +46,7 @@ const aes = Object.freeze({
 })
 
 const config = Object.freeze({
+  keepAliveMs: parseInt(process.env.KEEPALIVE_SEC || 30) * 1000,
   aes,
   /**
    * - `"development"` - use `port` for http (unsecure) connection to `"http://localhost:${WS_PORT}"`

@@ -46,7 +46,10 @@ const ATTACHES = {}
 
 const createFakeTls = (socket, dstHost) => {
   const stream = new FakeTls(socket, { fakeSni: dstHost, realSni: config.fakeHost })
-  stream.on('error', (err) => logger.log('fake-tls Error:', err))
+  stream.once('error', (err) => {
+    logger.log('fake-tls Error:', dstHost, err)
+    stream.destroy()
+  })
   return stream
 }
 /**
@@ -68,6 +71,7 @@ const connectProxy = async (opts, callback) => {
   socket.once('connect', () => {
     logger.log(`proxy-connected ${id} ${dstKey} ${duration.format()}`)
     data.socket = createFakeTls(socket, dstHost)
+    data.socket.once('close', () => socket.destroy())
     callback()
     localEmitter.emit(`proxy:${id}`)
   })
@@ -93,10 +97,12 @@ async function attachProxy(opts, callback) {
   if (!PROXIES[id] || !PROXIES[id].socket) {
     const def = new Defer()
     const sub = localEmitter.once(`proxy:${id}`, () => def.resolve())
-    setTimeout(() => def.resolve('timeout'), 10_000)
+    const timer = setTimeout(() => def.resolve('timeout'), 10_000)
     const res = await def.promise
+    clearTimeout(timer)
     sub.remove()
     if (res === 'timeout') {
+      logger.log('proxy-attach-failed', res)
       return callback('timeout')
     }
   }
@@ -106,7 +112,9 @@ async function attachProxy(opts, callback) {
     proxy.srcPort = srcPort
     proxy.socket.pipe(socket)
     socket.pipe(proxy.socket)
+
     socket.once('close', () => proxy.socket.destroy())
+    proxy.socket.once('close', () => socket.destroy())
     const info = { ...att, host: `${proxy.host}:${proxy.port}` }
     logger.log(`proxy-attached ${JSON.stringify(info)} ${proxy.duration.format()}`)
     callback()
@@ -130,7 +138,7 @@ wss.events.onConnect((socket, logger) => {
 const connectFakeHost = (socket, data, duration) => {
   duration = duration || new Duration()
   const fake = net.createConnection(443, config.fakeHost)
-  fake.setTimeout(30_000, () => fake.destroy())
+  fake.setTimeout(config.keepAliveMs, () => fake.destroy())
   fake.once('connect', () => {
     logger.log(`active-probe connected ${config.fakeHost}:443 ${duration.format()}`)
     if (data) {
@@ -143,6 +151,8 @@ const connectFakeHost = (socket, data, duration) => {
     logger.log(`active-probe error ${config.fakeHost}:443:`, err)
     socket.destroy()
   })
+  fake.once('close', () => socket.destroy())
+  socket.once('close', () => fake.destroy())
 }
 
 function removeSocket(srcPort) {
@@ -161,7 +171,7 @@ function removeSocket(srcPort) {
 
 server.on('connection', async (socket) => {
   const duration = new Duration()
-  socket.setTimeout(30_000, () => socket.destroy())
+  socket.setTimeout(config.keepAliveMs, () => socket.destroy())
   const address = getAddress(socket)
   /** @type {number} */
   const srcPort = address.remote.port

@@ -23,7 +23,13 @@ class FakeTls extends Transform {
     this.real = this._realSni ? new TlsParser(this._realSni) : null
     this._onData = this._onData.bind(this)
     this.stream.on('data', this._onData)
-    this.stream.once('close', () => this.stream.off('data', this._onData))
+    this.stream.once('close', () => {
+      this.stream.off('data', this._onData)
+      this.destroy()
+    })
+    this.once('close', () => {
+      this.stream.destroy()
+    })
   }
 
   /** @private */

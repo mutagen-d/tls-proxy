@@ -60,13 +60,16 @@ const server = createProxyServer({
     const remoteKey = `${config.remote.host}:${config.remote.port}`
     const socket = net.createConnection(config.remote.port, config.remote.host)
     const def1 = new Defer()
-    socket.on('connect', () => {
+    socket.once('connect', () => {
       def1.resolve()
       logger.log(`tcp connected: ${id} ${remoteKey}`)
     })
-    socket.on('error', (err) => {
+    socket.once('error', (err) => {
       def1.reject(err)
       logger.log(`tcp error: ${id} ${remoteKey}`, err)
+    })
+    socket.once('close', () => {
+      logger.log(`tcp closed: ${id} ${remoteKey} ${duration.format()}`)
     })
     const def2 = new Defer()
     ws.emit('proxy-connect', { dstHost, dstPort, id }, (err) => {
