@@ -100,7 +100,6 @@ const server = createProxyServer({
         fakeSni: config.fakeHost,
         realSni: dstHost,
       })
-      logger.log(`${id} fake-tls ${fakeTls}`)
       return fakeTls
     }
     const address = getAddress(socket)
