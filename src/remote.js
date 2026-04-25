@@ -9,6 +9,8 @@ const { Defer } = require('./tools/defer')
 const { EventEmitter } = require('./tools/events')
 const { Duration } = require('./tools/duration')
 const { memoryUsage, heapStats } = require('./tools/memory-usage')
+const packer = require('./net/packer')
+const { SocketBase } = require('./net/socket-base')
 
 const logger = createLogger('remote')
 const server = net.createServer()
@@ -61,7 +63,7 @@ const connectProxy = async (opts, callback) => {
   const duration = new Duration()
 
   const socket = net.createConnection(dstPort, dstHost)
-  socket.setTimeout(30_000, () => socket.destroy())
+  socket.setTimeout(config.keepAliveMs, () => socket.destroy())
   PROXIES[id] = { id, host: dstHost, port: dstPort, duration }
   const data = PROXIES[id]
 
@@ -93,6 +95,7 @@ const connectProxy = async (opts, callback) => {
  */
 async function attachProxy(opts, callback) {
   const { srcHost, srcPort, id } = opts
+  logger.log(`proxy-attach.. ${srcPort}`)
   const att = ATTACHES[srcPort] = { id, port: srcPort }
   if (!PROXIES[id] || !PROXIES[id].socket) {
     const def = new Defer()
@@ -176,6 +179,7 @@ server.on('connection', async (socket) => {
   /** @type {number} */
   const srcPort = address.remote.port
   SOCKETS[srcPort] = socket
+  logger.log(`SOCKET[${srcPort}] connected`)
   socket.once('close', () => {
     const att = ATTACHES[srcPort]
     removeSocket(srcPort)
@@ -187,6 +191,20 @@ server.on('connection', async (socket) => {
     socket.destroy()
   })
   socket.once('data', (data) => {
+    try {
+      /** @type {any[]} */
+      const args = packer.server.unpack(data)
+      const [event, opts, ack] = args
+      if (event == 'proxy-attach') {
+        attachProxy({ ...opts, srcPort }, (...args) => {
+          const res = SocketBase.ackResponse(ack, ...args)
+          socket.write(packer.server.pack(res.event, res.data))
+        })
+        return
+      }
+    } catch (e) {
+      logger.log(`SOCKET[${srcPort}] ERROR:`, e.message)
+    }
     if (!ATTACHES[srcPort]) {
       connectFakeHost(socket, data, duration)
     }
@@ -206,7 +224,7 @@ const clear = () => {
 setInterval(() => {
   const mem = memoryUsage()
   logger.log(`memory: ${JSON.stringify(mem)}`)
-}, 5000)
+}, 15_000)
 setInterval(() => clear(), 10_000);
 // setInterval(() => {
 //   const stats = heapStats()

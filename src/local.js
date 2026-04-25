@@ -10,6 +10,8 @@ const { FakeTls } = require('./tls-parser/fake-tls')
 const { createLogger } = require('./tools/logger')
 const { fetchIP } = require('./tools/fetch-ip')
 const { Duration } = require('./tools/duration')
+const { SocketBase } = require('./net/socket-base')
+const { client } = require('./net/packer')
 
 const blackList = config.blackList || []
 const directList = config.directList || []
@@ -83,11 +85,30 @@ const server = createProxyServer({
       }
     })
     await def1.promise
+
+    if (config.proxyAttach === 'tcp') {
+      const sb = new SocketBase(socket, client)
+      sb.connected = true
+      const def3 = new Defer()
+      sb.emit('proxy-attach', { dstHost, dstPort, id }, (err) => {
+        sb.detach()
+        err ? def3.reject(err) : def3.resolve()
+      })
+      await Promise.all([def2.promise, def3.promise])
+      logger.log(`${id} fake-tls: ${JSON.stringify({ fakeSni: config.fakeHost, realSni: dstHost })}`, duration.format())
+      const fakeTls = new FakeTls(socket, {
+        fakeSni: config.fakeHost,
+        realSni: dstHost,
+      })
+      logger.log(`${id} fake-tls ${fakeTls}`)
+      return fakeTls
+    }
     const address = getAddress(socket)
     const srcPort = address.local.port
+    logger.log('TCP address:', JSON.stringify(address.local))
     const srcHost = await fetchIP()
     // 2026-04-22: дожидаемся, пока установится соединение
-    await def2.promise
+    // await def2.promise
     const def3 = new Defer()
     ws.emit('proxy-attach', { id, srcHost, srcPort }, (err) => {
       if (err) {

@@ -79,6 +79,25 @@ class SocketBase {
     this.reconnectTimeout = 0
   }
 
+  /**
+   * 
+   * @param {{ ackId: string; type: string }} [ack]
+   * @param {...any} args
+   */
+  static ackResponse(ack, ...args) {
+    if (!ack || !ack.ackId || ack.type !== 'request') {
+      return
+    }
+    return {
+      event: AckResponseEvent,
+      data: {
+        ackId: ack.ackId,
+        type: 'response',
+        args,
+      }
+    }
+  }
+
   detach() {
     this.socket.off('data', this.onData)
     this.socket.off('error', this._onError)

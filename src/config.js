@@ -67,6 +67,8 @@ const config = Object.freeze({
   local,
   blackList,
   directList,
+  /** @type {'tcp' | 'ws'} */
+  proxyAttach: process.env.PROXY_ATTACH || 'tcp'
 })
 
 module.exports = { config }
