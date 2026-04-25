@@ -55,30 +55,30 @@ const server = createProxyServer({
     }
     const dstKey = `${dstHost}:${dstPort}`
     const id = crypto.randomUUID()
-    logger.log(`proxy: ${id} ${dstKey} ${isTls ? '(tls)' : ''}`)
+    logger.log(`${id} PROXY ${dstKey} ${isTls ? '(tls)' : ''}`)
     //
     const remoteKey = `${config.remote.host}:${config.remote.port}`
     const socket = net.createConnection(config.remote.port, config.remote.host)
     const def1 = new Defer()
     socket.once('connect', () => {
       def1.resolve()
-      logger.log(`tcp connected: ${id} ${remoteKey}`)
+      logger.log(`${id} TCP connected ${remoteKey} (${dstKey})`)
     })
     socket.once('error', (err) => {
       def1.reject(err)
-      logger.log(`tcp error: ${id} ${remoteKey}`, err)
+      logger.log(`${id} TCP error ${remoteKey} (${dstKey})`, err)
     })
     socket.once('close', () => {
-      logger.log(`tcp closed: ${id} ${remoteKey} ${duration.format()}`)
+      logger.log(`${id} TCP closed ${remoteKey} (${dstKey}) ${duration.format()}`)
     })
     const def2 = new Defer()
     ws.emit('proxy-connect', { dstHost, dstPort, id }, (err) => {
       if (err) {
-        logger.log('proxy-connect Error:', id, dstKey, err)
+        logger.log(`${id} PROXY connect Error (${dstKey}):`, err)
         def2.reject(err)
         socket.destroy()
       } else {
-        logger.log('proxy-connect done', id, dstKey)
+        logger.log(`${id} PROXY connect Done (${dstKey})`)
         def2.resolve()
       }
     })
@@ -91,20 +91,21 @@ const server = createProxyServer({
     const def3 = new Defer()
     ws.emit('proxy-attach', { id, srcHost, srcPort }, (err) => {
       if (err) {
-        logger.log('proxy-attach Error:', err)
+        logger.log(`${id} PROXY attach Error (${dstKey}):`, err)
         def3.reject(err)
         socket.destroy()
       } else {
-        logger.log('proxy-attach done', dstKey)
+        logger.log(`${id} PROXY attach Done (${dstKey})`)
         def3.resolve()
       }
     })
     await Promise.all([def2.promise, def3.promise])
-    logger.log(`fake-tls: ${JSON.stringify({ fakeSni: config.fakeHost, realSni: dstHost })}`, duration.format())
+    logger.log(`${id} fake-tls: ${JSON.stringify({ fakeSni: config.fakeHost, realSni: dstHost })}`, duration.format())
     const fakeTls = new FakeTls(socket, {
       fakeSni: config.fakeHost,
       realSni: dstHost,
     })
+    logger.log(`${id} fake-tls ${fakeTls}`)
     return fakeTls
   }
 })

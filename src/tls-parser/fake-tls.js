@@ -32,6 +32,19 @@ class FakeTls extends Transform {
     })
   }
 
+  toString() {
+    const proto = Object.getPrototypeOf(this)
+    const ctor = proto && proto.constructor || proto
+    return `[object ${ctor ? ctor.name : 'FakeTls'}]`
+  }
+
+  toJSON() {
+    return {
+      realSni: this._realSni,
+      fakeSni: this._fakeSni,
+    }
+  }
+
   /** @private */
   _onData(chunk) {
     if (this.destroyed || this.closed) {
