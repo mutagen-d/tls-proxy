@@ -2,6 +2,8 @@ const crypto = require('crypto')
 const msgpackr = require('msgpackr')
 const { config } = require('../config')
 const { aes: _aes } = require('../tools/aes')
+const { bufs } = require('../tools/bufs')
+const { random } = require('../tools/random')
 
 /**
  * @typedef {{
@@ -48,12 +50,13 @@ const createPacker = (opts) => {
     const ts = Math.floor(Date.now() / 1000)
     const expires = new Date(Date.now() + 86400_000)
     const headers = [
-      'HTTP/1.1 401',
+      'HTTP/1.1 301',
       'Content-Type: text/plain; charset=UTF-8',
       `Set-Cookie: req=${base64}; expires=${expires.toGMTString()}; path=/; domain=${config.fakeHost}`,
       `Set-Cookie: _ts=${ts}; expires=${expires.toGMTString()}; path=/; domain=${config.fakeHost}`,
+      `Location: https://${config.fakeHost}:${config.remote.port}`,
       '',
-      'Unauthorized',
+      '',
     ]
     const SEP = '\r\n'
     const headerStr = headers.join(SEP)
@@ -64,7 +67,8 @@ const createPacker = (opts) => {
    */
   const pack = (...args) => {
     const buffer = msgpackr.pack(args)
-    const encoded = aes.encode(buffer)
+    const data = bufs.encode(buffer, random(80, 128))
+    const encoded = aes.encode(data)
     return isClient ? clientPack(encoded) : serverPack(encoded)
   }
   /**
@@ -128,7 +132,8 @@ const createPacker = (opts) => {
       return buffer
     }
     const data = aes.decode(encoded)
-    return msgpackr.unpack(data)
+    const payload = bufs.decode(data)
+    return msgpackr.unpack(payload)
   }
   return { pack, unpack }
 }
