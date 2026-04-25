@@ -14,6 +14,8 @@ class EventEmitter {
      * @protected
      * @type {{ [event: string]: Array<(...args: any) => any>}} */
     this.listeners = {}
+    /** @protected */
+    this.onceListeners = new WeakMap()
   }
 
   /**
@@ -21,7 +23,7 @@ class EventEmitter {
    * @param  {...any} args 
    */
   emit(event, ...args) {
-    logger.log(`emit[${this.id}] "${event}"`)
+    logger.log(`emit[${this.id}] "${event}" [${args.map(v => typeof v).join(', ')}]`)
     const listeners = this.listeners[event] || []
     for (const listener of listeners) {
       try {
@@ -34,9 +36,9 @@ class EventEmitter {
       }
     }
     for (const listener of listeners) {
-      if (listener.once) {
-        delete listener.once
+      if (this.onceListeners.get(listener)) {
         this.off(event, listener)
+        this.onceListeners.delete(listener)
       }
     }
   }
@@ -46,14 +48,23 @@ class EventEmitter {
    * @param {(...args: any) => any} listener
    */
   once(event, listener) {
-    return this._on(event, listener, true)
+    this.onceListeners.set(listener, true)
+    return this.on(event, listener)
   }
+
   /**
    * @param {string} event
    * @param {(...args: any) => any} listener
    */
   on(event, listener) {
-    return this._on(event, listener)
+    const listeners = this.listeners[event] || []
+    const index = listeners.indexOf(listener)
+    if (index == -1) {
+      listeners.push(listener)
+    }
+    this.listeners[event] = listeners
+    const remove = () => this.off(event, listener)
+    return { remove }
   }
 
   /**
@@ -85,23 +96,6 @@ class EventEmitter {
     if (!listeners.length) {
       delete this.listeners[event]
     }
-  }
-
-  /**
-   * @private
-   * @param {string} event
-   * @param {(...args: any) => any} listener
-   */
-  _on(event, listener, once = false) {
-    const listeners = this.listeners[event] || []
-    listener.once = once
-    const index = listeners.indexOf(listener)
-    if (index == -1) {
-      listeners.push(listener)
-    }
-    this.listeners[event] = listeners
-    const remove = () => this.off(event, listener)
-    return { remove }
   }
 }
 
